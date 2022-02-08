@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Globalization;
+using System.Text;
 using DCAF.Inspection._lib;
 
 namespace DCAF.Inspection
@@ -8,51 +9,72 @@ namespace DCAF.Inspection
     public class RollCallCollectionCsvParser
     {
         const char Separator = ',';
-        const string StartIdent = "-- start --";
-        const string EndIdent = "-- start --";
+        const string EndIdent = "-- end --";
         const string HeaderColumns = "Name,Date,Time";
         const string RollCallColumns = "Role,Spec,Name,ID,Timestamp,Status";
-        public Outcome<IEnumerable<RollCall>> ParseCsv(string[] lines)
+        public Outcome<RollCallCollection> ParseCsv(string[] lines)
         {
-            string line = null!;
+            // string line;
             var list = new List<RollCall>();
-            for (var i = 0; i < lines.Length; i++)
+            var eof = false;
+            for (var i = 0; i < lines.Length && !eof; i++)
             {
-                skipToAfter(HeaderColumns);
+                skipToAfter(HeaderColumns, out var line, out var lineNo);
                 if (!parseRollCallMetadata(out var name, out var dateTime))
-                    return Outcome<IEnumerable<RollCall>>.Fail(
-                        new CsvFormatException("Expected roll call meta data (name, time etc.", i+1));
+                {
+                    if (!eof)
+                        return Outcome<RollCallCollection>.Fail(
+                            new CsvFormatException("Expected roll call meta data (name, time etc.", lineNo));
+                    continue;
+                }
                 
-                skipToAfter(RollCallColumns);
-                line = lines[i];
+                skipToAfter(RollCallColumns, out line, out lineNo);
                 if (line.StartsWith(EndIdent)) // there's always a small chance no one has roll called yet 
                     continue;
 
-                if (!parseEntries(out List<RollCallEntry> entries))
-                    return Outcome<IEnumerable<RollCall>>.Fail(
-                        new CsvFormatException("Expected roll entries", i+1));
+                if (!parseEntries(out List<RollCallEntry>? entries))
+                    return Outcome<RollCallCollection>.Fail(
+                        new CsvFormatException("Expected roll entries", lineNo));
                 
                 list.Add(new RollCall(name!, dateTime!.Value, entries!));
 
                 bool parseRollCallMetadata(out string? rcName, out DateTime? rcDateTime)
                 {
-                    const string DateFormat = "dd-MM-yyyy HH:mm";
-                    var provider = CultureInfo.InvariantCulture;
-                    
+                    // cells might contain commas so we need to apply som special parsing for meta data ...
+                    const string DateFormat = "d-M-yyyy HH:mm";
                     rcName = null;
                     rcDateTime = null;
                     var split = line.Split(Separator);
                     if (split.Length < 3)
-                        return false;
+                    {
+                        // some event names seems to allow line feeds, test next line ...
+                        ++i;
+                        eof = i >= lines.Length;
+                        if (eof)
+                            return false;
+                        
+                        line = lines[i];
+                        lineNo = i + 1;
+                        return parseRollCallMetadata(out rcName, out rcDateTime);
+                    }
 
-                    rcName = split[0];
-                    var sDataTime = $"{split[1]}T{split[2]}";
-                    if (!DateTime.TryParseExact(sDataTime, DateFormat, provider, DateTimeStyles.AssumeUniversal,
-                            out var dt))
-                        return false;
+                    var sb = new StringBuilder(split[0]);
+                    for (var j = 1; j < split.Length-1; j++)
+                    {
+                        var sDataTime = $"{split[j]} {split[j+1]}";
+                        if (!DateTime.TryParseExact(sDataTime, DateFormat, null, DateTimeStyles.None, out var dt))
+                        {
+                            sb.Append(", ");
+                            sb.Append(split[j]);
+                            continue;
+                        }
 
-                    rcDateTime = dt;
-                    return true;
+                        rcName = sb.ToString();
+                        rcDateTime = dt;
+                        return true;
+                    }
+
+                    return false;
                 }
                 
                 Outcome<IEnumerable<RollCallEntry>> parseEntries(out List<RollCallEntry>? rollCallEntries)
@@ -61,6 +83,9 @@ namespace DCAF.Inspection
                     for (; i < lines.Length; i++)
                     {
                         line = lines[i];
+                        if (line == EndIdent)
+                            break;
+                        
                         var split = line.Split(Separator);
                         if (split.Length < 6)
                             return Outcome<IEnumerable<RollCallEntry>>.Fail(
@@ -88,21 +113,26 @@ namespace DCAF.Inspection
                     return Outcome<IEnumerable<RollCallEntry>>.Success(rollCallEntries);
                 }
 
-                void skipToAfter(string pattern)
+                void skipToAfter(string pattern, out string nextLine, out int newLineNo)
                 {
                     for (; i < lines.Length; i++)
                     {
-                        line = lines[i];
-                        if (!line.Equals(pattern, StringComparison.InvariantCultureIgnoreCase)) 
+                        nextLine = lines[i];
+                        if (!nextLine.StartsWith(pattern, StringComparison.InvariantCultureIgnoreCase)) 
                             continue;
                         
                         ++i;
+                        nextLine = lines[i];
+                        newLineNo = i + 1;
                         return;
                     }
+
+                    nextLine = string.Empty;
+                    newLineNo = i + 1;
                 }
             }
             
-            return Outcome<IEnumerable<RollCall>>.Success(list);
+            return Outcome<RollCallCollection>.Success(new RollCallCollection(list));
         }
     }
 }

@@ -4,8 +4,8 @@ namespace DCAF.Inspection
 {
     public class CsvFormatException : FormatException
     {
-        public CsvFormatException(string message, int line, Exception? inner = null)
-            : base($"{message} @ line {line.ToString()}")
+        public CsvFormatException(string message, int lineNo, Exception? inner = null)
+        : base($"{message} @ line {lineNo.ToString()}", inner)
         {
         }
     }

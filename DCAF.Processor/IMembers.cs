@@ -1,6 +1,6 @@
 namespace DCAF.Inspection
 {
-    public interface IDCAFDatastore
+    public interface IMembers
     {
         
     }
