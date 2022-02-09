@@ -2,7 +2,7 @@ using System;
 
 namespace DCAF.Inspection
 {
-    public class RollCallEntry
+    public class EventEntry
     {
         public string Role { get; set; }
 

@@ -7,10 +7,10 @@ using DCAF.Inspection._lib;
 
 namespace DCAF.Inspection
 {
-    public class RollCallCollection : IEnumerable<RollCall>
+    public class EventCollection : IEnumerable<Event>
     {
-        readonly List<RollCall> _rollCalls;
-        public IEnumerator<RollCall> GetEnumerator() => _rollCalls.GetEnumerator();
+        readonly List<Event> _rollCalls;
+        public IEnumerator<Event> GetEnumerator() => _rollCalls.GetEnumerator();
 
         IEnumerator IEnumerable.GetEnumerator() => GetEnumerator();
 
@@ -26,23 +26,23 @@ namespace DCAF.Inspection
                 : $"{first.DateTime:u} -- {last!.DateTime:u} ({_rollCalls.Count} events)";
         }
 
-        public static async Task<Outcome<RollCallCollection>> LoadFromAsync(FileInfo file)
+        public static async Task<Outcome<EventCollection>> LoadFromAsync(FileInfo file)
         {
             if (!file.Exists)
-                return Outcome<RollCallCollection>.Fail(
+                return Outcome<EventCollection>.Fail(
                     new FileNotFoundException($"Could not find roll call file: {file.FullName}"));
 
             var csv = await File.ReadAllLinesAsync(file.FullName);
             var parser = new RollCallCollectionCsvParser();
-            Outcome<RollCallCollection> outcome = parser.ParseCsv(csv);
+            Outcome<EventCollection> outcome = parser.ParseCsv(csv);
             if (!outcome)
-                return Outcome<RollCallCollection>.Fail(outcome.Exception!);
+                return Outcome<EventCollection>.Fail(outcome.Exception!);
 
-            var rollCalls = new RollCallCollection(new List<RollCall>(outcome.Value!));
-            return Outcome<RollCallCollection>.Success(rollCalls);
+            var rollCalls = new EventCollection(new List<Event>(outcome.Value!));
+            return Outcome<EventCollection>.Success(rollCalls);
         }
 
-        public RollCallCollection(List<RollCall> rollCalls)
+        public EventCollection(List<Event> rollCalls)
         {
             _rollCalls = rollCalls;
         }

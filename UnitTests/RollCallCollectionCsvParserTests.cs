@@ -11,7 +11,7 @@ namespace UnitTests
         public async Task Test_parse_CSV_file()
         {
             var file = new FileInfo("./_files/test1.csv");
-            var outcome = await RollCallCollection.LoadFromAsync(file);
+            var outcome = await EventCollection.LoadFromAsync(file);
             Assert.True(outcome);
         }
     }

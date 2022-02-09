@@ -3,5 +3,6 @@
   &lt;TestAncestor&gt;
     &lt;TestId&gt;xUnit::BDA2C8FB-6145-4F54-AF19-43E42F0B5532::net5.0::UnitTests.StringHelperTests.Test1&lt;/TestId&gt;
     &lt;TestId&gt;xUnit::BDA2C8FB-6145-4F54-AF19-43E42F0B5532::net5.0::UnitTests.RollCallCollectionCsvParserTests.Test_parse_CSV_file&lt;/TestId&gt;
+    &lt;TestId&gt;xUnit::BDA2C8FB-6145-4F54-AF19-43E42F0B5532::net5.0::UnitTests.StringHelperTests&lt;/TestId&gt;
   &lt;/TestAncestor&gt;
 &lt;/SessionState&gt;</s:String></wpf:ResourceDictionary>

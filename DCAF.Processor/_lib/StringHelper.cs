@@ -7,20 +7,21 @@ namespace DCAF.Inspection._lib
 {
     public static class StringHelper
     {
-        public static string ToIdentifier(this string self, IdentifierCasing casing = IdentifierCasing.Camel)
+        public static string ToIdentifier(this string self, IdentCasing casing = IdentCasing.None)
         {
             if (string.IsNullOrEmpty(self))
                 return self;
-            
-            return process(
-                new StringProcessingArgs(self)
+
+            var processors = casing != IdentCasing.None
+                ? new StringFilter<StringFilterArgs>[] { filterWhitespace, filterInitialCasing }
+                : new StringFilter<StringFilterArgs>[] { filterWhitespace };
+            return filter(
+                new StringFilterArgs(self)
                 {
                     Casing = casing,
                     RemoveAllWhitespace = true
-                },  
-                trimWhitespace,
-                setInitialCasing);
-
+                }, 
+                processors);
         }
 
         public static string ToUpperInitial(this string self)
@@ -28,11 +29,11 @@ namespace DCAF.Inspection._lib
             if (string.IsNullOrEmpty(self))
                 return self;
 
-            return process(new StringProcessingArgs(self)
+            return filter(new StringFilterArgs(self)
                 {
-                    Casing = IdentifierCasing.Pascal
+                    Casing = IdentCasing.Pascal
                 },
-                setInitialCasing);
+                filterInitialCasing);
         }
 
         public static string ToLowerInitial(this string self)
@@ -40,68 +41,112 @@ namespace DCAF.Inspection._lib
             if (string.IsNullOrEmpty(self))
                 return self;
 
-            return process(new StringProcessingArgs(self)
+            return filter(new StringFilterArgs(self)
                 {
-                    Casing = IdentifierCasing.Lower
+                    Casing = IdentCasing.Lower
                 },
-                setInitialCasing);
+                filterInitialCasing);
         }
 
-        static StringProcessResult trimWhitespace<T>(T args, out char use) where T : StringProcessingArgs
+        static StringFilterResult filterWhitespace<T>(T args, out char use) where T : StringFilterArgs
         {
             use = args.Array[args.Index];
-            return char.IsWhiteSpace(args.Array[args.Index]) ? StringProcessResult.Skip : StringProcessResult.Continue;
+            return char.IsWhiteSpace(args.Array[args.Index])
+                ? StringFilterResult.Skip 
+                : StringFilterResult.Continue;
         }
         
-        static StringProcessResult setInitialCasing<T>(T args, out char use) where T : StringProcessingArgs
+        static StringFilterResult filterInitialCasing<T>(T args, out char use) where T : StringFilterArgs
         {
             var ca = args.Array;
             var i = args.Index;
             var isInitial = args.Index == 0 || char.IsWhiteSpace(ca[i - 1]) && char.IsLetter(ca[i]);
             use = ca[i];
             if (!isInitial)
-                return StringProcessResult.Continue;
+                return StringFilterResult.Continue;
 
-            use = args.Casing switch
+            switch (args.Casing)
             {
-                IdentifierCasing.None => ca[i],
-                IdentifierCasing.Camel => char.ToLower(ca[i]),
-                IdentifierCasing.Pascal => char.ToUpper(ca[i]),
-                IdentifierCasing.Kebab => '-',
-                IdentifierCasing.Snake => '_',
-                _ => throw new Exception()
-            };
-            
-            return StringProcessResult.Continue;
+                case IdentCasing.None:
+                    return StringFilterResult.Continue;
+                
+                case IdentCasing.Camel:
+                    // only the first letter of the string should be lower for Camel case; rest are left as-is ...  
+                    if (args.GetValue("initialWasSet", false))
+                    {
+                        use = char.ToUpper(use);
+                        return StringFilterResult.Use;
+                    }
+
+                    use = char.ToLower(use);
+                    args.SetValue("initialWasSet", true);
+                    return StringFilterResult.Use;
+                
+                case IdentCasing.Pascal:
+                    use = char.ToUpper(use);
+                    return StringFilterResult.Use;
+                
+                case IdentCasing.Kebab:
+                    use = '-';
+                    return StringFilterResult.Insert;
+                
+                case IdentCasing.Snake:
+                    use = '_';
+                    return StringFilterResult.Insert;
+                
+                case IdentCasing.Lower:
+                    use = char.ToLower(use);
+                    return StringFilterResult.Use;
+
+                case IdentCasing.Upper:
+                    use = char.ToUpper(use);
+                    return StringFilterResult.Use;
+            }
+            throw new ArgumentOutOfRangeException();
         }
 
-        static string process<T>(T args, params StringProcessor<T>[] processors) where T : StringProcessingArgs
+        static string filter<T>(T args, params StringFilter<T>[] processors) 
+        where T : StringFilterArgs
         {
+            const char Nope = (char)0;
             var sb = args.StringBuilder;
             var ca = args.Array;
             var i = args.Index;
+            var use = (char)0;
             for (; i < ca.Length; i++)
             {
                 args.Index = i;
-                for (var p = 0; p < processors.Length; p++)
+                var doneProcessing = false;
+                for (var p = 0; p < processors.Length && !doneProcessing; p++)
                 {
                     var process = processors[p];
-                    switch (process(args, out var use))
+                    switch (process(args, out use))
                     {
-                        case StringProcessResult.None:
+                        case StringFilterResult.None:
                             continue;
                         
-                        case StringProcessResult.Continue:
-                            sb.Append(use);
+                        case StringFilterResult.Use:
+                            doneProcessing = true;
                             break;
                     
-                        case StringProcessResult.Skip:
+                        case StringFilterResult.Insert:
+                            doneProcessing = true;
+                            sb.Insert(i, use);
+                            use = Nope;
                             break;
                     
-                        case StringProcessResult.EndExclusive:
+                        case StringFilterResult.Continue:
+                            break;
+                    
+                        case StringFilterResult.Skip:
+                            doneProcessing = true;
+                            use = Nope;
+                            break;
+                    
+                        case StringFilterResult.EndExclusive:
                             return sb.ToString();
 
-                        case StringProcessResult.EndInclusive:
+                        case StringFilterResult.EndInclusive:
                             sb.Append(use);
                             return sb.ToString();
 
@@ -109,45 +154,36 @@ namespace DCAF.Inspection._lib
                             throw new ArgumentOutOfRangeException();
                     }
                 }
+
+                if (use != Nope)
+                {
+                    sb.Append(use);
+                }                
             }
 
             return sb.ToString();
         }
 
-        enum StringProcessResult
+        enum StringFilterResult
         {
             None,
+            
+            Use,
             
             Continue,
             
             Skip,
+            
+            Insert,
             
             EndExclusive,
             
             EndInclusive
         }
 
-        public enum IdentifierCasing
-        {
-            None,
-            
-            Camel,
-            
-            Pascal,
-            
-            Kebab,
-            
-            Snake,
-            
-            Lower,
-            
-            Upper
-        }
-
-        delegate StringProcessResult StringProcessor<in T>(T args, out char use)
-            where T : StringProcessingArgs;
+        delegate StringFilterResult StringFilter<in T>(T args, out char use) where T : StringFilterArgs;
         
-        class StringProcessingArgs
+        class StringFilterArgs
         {
             Dictionary<string, object?>? _values;
 
@@ -157,7 +193,7 @@ namespace DCAF.Inspection._lib
 
             public int Index { get; set; }
             
-            public IdentifierCasing Casing { get; set; }
+            public IdentCasing Casing { get; set; }
 
             public bool RemoveAllWhitespace { get; set; }
             
@@ -179,7 +215,7 @@ namespace DCAF.Inspection._lib
                 return true;
             }
 
-            protected void SetValue(string key, object? value, bool overwrite = false)
+            public void SetValue(string key, object? value, bool overwrite = false)
             {
                 if (_values is null)
                 {
@@ -200,16 +236,33 @@ namespace DCAF.Inspection._lib
             }
 
             
-            public StringProcessingArgs(string s) : this(new StringBuilder(), s.ToCharArray(), 0)
+            public StringFilterArgs(string s) : this(new StringBuilder(), s.ToCharArray(), 0)
             {
             }
 
-            public StringProcessingArgs(StringBuilder stringBuilder, char[] array, int index)
+            public StringFilterArgs(StringBuilder stringBuilder, char[] array, int index)
             {
                 StringBuilder = stringBuilder;
                 Array = array;
                 Index = index;
             }
         }
+    }
+    
+    public enum IdentCasing
+    {
+        None,
+            
+        Camel,
+            
+        Pascal,
+            
+        Kebab,
+            
+        Snake,
+            
+        Lower,
+            
+        Upper
     }
 }

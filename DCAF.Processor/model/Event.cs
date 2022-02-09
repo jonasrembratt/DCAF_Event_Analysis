@@ -6,9 +6,9 @@ using System.Diagnostics;
 namespace DCAF.Inspection
 {
     [DebuggerDisplay("{ToString()}")]
-    public class RollCall : IEnumerable<RollCallEntry>
+    public class Event : IEnumerable<EventEntry>
     {
-        List<RollCallEntry> _entries;
+        List<EventEntry> _entries;
 
         public int Count => _entries.Count;
         
@@ -18,11 +18,11 @@ namespace DCAF.Inspection
 
         public override string ToString() => $"{Name} {DateTime:u} ({Count})";
 
-        public IEnumerator<RollCallEntry> GetEnumerator() => _entries.GetEnumerator();
+        public IEnumerator<EventEntry> GetEnumerator() => _entries.GetEnumerator();
 
         IEnumerator IEnumerable.GetEnumerator() => ((IEnumerable)_entries).GetEnumerator();
 
-        public RollCall(string name, DateTime dateTime, List<RollCallEntry> entries)
+        public Event(string name, DateTime dateTime, List<EventEntry> entries)
         {
             Name = name;
             DateTime = dateTime;
